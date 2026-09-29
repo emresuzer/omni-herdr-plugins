@@ -1,0 +1,19 @@
+id = "todo-md"
+name = "TODO.md Viewer"
+version = "0.1.0"
+min_herdr_version = "0.7.0"
+platforms = ["linux"]
+description = "Popup showing the active project's TODO.md, live-reloading as the agent updates it"
+
+[[panes]]
+id = "viewer"
+title = "TODO.md"
+command = ["python3", "viewer.py"]
+placement = "popup"
+width = "70%"
+height = "75%"
+
+[[actions]]
+id = "open-viewer"
+title = "Show TODO.md"
+command = ["python3", "viewer.py", "--open-popup"]
