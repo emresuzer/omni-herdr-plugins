@@ -1,0 +1,19 @@
+id = "recent-chat-items"
+name = "Recent Chat Items"
+version = "0.1.0"
+min_herdr_version = "0.7.0"
+platforms = ["linux"]
+description = "Quickly pick and open the last 10 files and URLs from AI chat"
+
+[[panes]]
+id = "picker"
+title = "Recent Chat Items"
+command = ["python3", "picker.py"]
+placement = "popup"
+width = "80%"
+height = "70%"
+
+[[actions]]
+id = "open-picker"
+title = "Open Recent Chat Items"
+command = ["python3", "open_picker.py"]

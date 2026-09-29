@@ -1,0 +1,38 @@
+id = "auto-pane-title"
+name = "Auto Pane Title"
+version = "0.1.0"
+min_herdr_version = "0.7.0"
+platforms = ["linux"]
+description = "Automatically sets Herdr pane titles to agent session names (/rename) or current folder"
+
+[[startup]]
+command = ["python3", "sync_titles.py"]
+
+[[events]]
+on = "pane.created"
+command = ["python3", "sync_titles.py"]
+
+[[events]]
+on = "pane.focused"
+command = ["python3", "sync_titles.py"]
+
+[[events]]
+on = "pane.agent_detected"
+command = ["python3", "sync_titles.py"]
+
+[[events]]
+on = "pane.agent_status_changed"
+command = ["python3", "sync_titles.py"]
+
+[[events]]
+on = "workspace.focused"
+command = ["python3", "sync_titles.py"]
+
+[[events]]
+on = "tab.focused"
+command = ["python3", "sync_titles.py"]
+
+[[actions]]
+id = "sync"
+title = "Sync Pane Titles"
+command = ["python3", "sync_titles.py"]
