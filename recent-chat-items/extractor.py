@@ -264,6 +264,23 @@ def get_claude_jsonl(proc_info, cwd=None):
             except Exception:
                 pass
 
+        # ~/.claude/sessions/<pid>.json is rewritten by Claude Code on /clear and
+        # /resume, so it always names the CURRENT session.
+        for pid in pids:
+            try:
+                with open(os.path.expanduser(f"~/.claude/sessions/{pid}.json"), "r", encoding="utf-8") as f:
+                    info = json.load(f)
+                sess_id, sess_cwd = info.get("sessionId"), info.get("cwd")
+                if sess_id and sess_cwd:
+                    slug = re.sub(r"[^A-Za-z0-9]", "-", sess_cwd)
+                    jsonl = os.path.expanduser(f"~/.claude/projects/{slug}/{sess_id}.jsonl")
+                    if os.path.isfile(jsonl):
+                        return jsonl
+            except (OSError, ValueError):
+                pass
+
+        # Fallback: the open /tmp/claude-<uid>/<project-slug>/<session-id>/tasks fd.
+        # Stale after /clear (the old session's handle stays open), hence last resort.
         for pid in pids:
             fd_dir = f"/proc/{pid}/fd"
             if not os.path.isdir(fd_dir):
@@ -370,7 +387,7 @@ def get_recent_chat_items(pane_id=None, cwd=None, max_files=10, max_urls=10, sca
     if resp and "result" in resp and "read" in resp["result"]:
         text = resp["result"]["read"].get("text", "")
 
-    # 2. Check for Claude Code jsonl transcript (tail 64KB instead of 2MB)
+    # 2. Check for Claude Code jsonl transcript (tail 1MB; one turn with tool output can exceed 64KB)
     jsonl_lines = []
     jsonl_path = get_claude_jsonl(proc_info, cwd=primary_cwd)
     if jsonl_path:
@@ -378,7 +395,7 @@ def get_recent_chat_items(pane_id=None, cwd=None, max_files=10, max_urls=10, sca
             with open(jsonl_path, "rb") as f:
                 f.seek(0, 2)
                 fsize = f.tell()
-                f.seek(max(0, fsize - 65536))
+                f.seek(max(0, fsize - 1048576))
                 raw = f.read().decode("utf-8", errors="ignore")
                 jsonl_lines = [l for l in raw.splitlines() if l.strip()]
         except Exception:
