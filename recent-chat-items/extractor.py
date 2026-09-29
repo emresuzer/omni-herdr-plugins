@@ -387,7 +387,7 @@ def get_recent_chat_items(pane_id=None, cwd=None, max_files=10, max_urls=10, sca
     if resp and "result" in resp and "read" in resp["result"]:
         text = resp["result"]["read"].get("text", "")
 
-    # 2. Check for Claude Code jsonl transcript (tail 1MB; one turn with tool output can exceed 64KB)
+    # 2. Check for Claude Code jsonl transcript (tail 256KB; one turn with tool output can exceed 64KB)
     jsonl_lines = []
     jsonl_path = get_claude_jsonl(proc_info, cwd=primary_cwd)
     if jsonl_path:
@@ -395,7 +395,7 @@ def get_recent_chat_items(pane_id=None, cwd=None, max_files=10, max_urls=10, sca
             with open(jsonl_path, "rb") as f:
                 f.seek(0, 2)
                 fsize = f.tell()
-                f.seek(max(0, fsize - 1048576))
+                f.seek(max(0, fsize - 262144))
                 raw = f.read().decode("utf-8", errors="ignore")
                 jsonl_lines = [l for l in raw.splitlines() if l.strip()]
         except Exception:
