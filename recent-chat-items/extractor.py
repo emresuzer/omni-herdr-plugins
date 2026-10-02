@@ -520,14 +520,21 @@ def get_recent_chat_items(pane_id=None, cwd=None, max_files=10, max_urls=10, sca
         if len(files) >= max_files and len(urls) >= max_urls:
             break
 
-        for m in url_regex.finditer(line):
+        try:
+            d = json.loads(line)
+        except Exception:
+            continue
+        # Only chat messages: bookkeeping entries (file-history-snapshot, system, ...)
+        # and the per-entry "cwd" field carry stale paths that would fill every slot.
+        if d.get("type") not in ("user", "assistant"):
+            continue
+        body = json.dumps(d.get("message", {}))
+        for m in url_regex.finditer(body):
             add_url(m.group())
-
-        for m in abs_path_regex.finditer(line):
+        for m in abs_path_regex.finditer(body):
             add_file(m.group(1))
 
         try:
-            d = json.loads(line)
             line_cwd = d.get("cwd")
             msg = d.get("message", {})
             if isinstance(msg, dict):
