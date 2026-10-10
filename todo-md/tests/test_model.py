@@ -79,6 +79,12 @@ class Model(unittest.TestCase):
         empty = "## X\n\n## Y\n- [ ] #1 y\n"
         self.assertEqual(tm.remove_phase(empty, tm.find_phase(empty, "\x00X")), "## Y\n- [ ] #1 y\n")
 
+    def test_delete_phase(self):
+        a = tm.find_phase(SRC, "Proj\x00A")
+        out = tm.delete_phase(SRC, a)
+        self.assertEqual(out, "# Proj\n\n## B\n- [-] #4 four (no longer needed)\n")
+        self.assertNotIn("old note", out)
+
     def test_write_atomic(self):
         import tempfile
         d = tempfile.mkdtemp()

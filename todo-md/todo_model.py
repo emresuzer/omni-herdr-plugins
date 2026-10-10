@@ -226,6 +226,13 @@ def remove_phase(text, phase):
     return "\n".join(lines)
 
 
+def delete_phase(text, phase):
+    """Delete a phase with everything under it. Returns None for a heading-less block."""
+    if phase.line < 0:
+        return None
+    return _splice(text, phase.line, phase.end - phase.line, [])
+
+
 def write_atomic(path, text):
     """Write via a temp file + rename so a reader never sees half a file."""
     d = os.path.dirname(path) or "."

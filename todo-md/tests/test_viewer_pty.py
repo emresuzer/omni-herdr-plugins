@@ -43,14 +43,25 @@ class Viewer(unittest.TestCase):
                     f"[ \"$1 $2\" = \"agent list\" ] && echo '{json.dumps(agents)}'\n"
                     "exit 0\n")
         os.chmod(fake, 0o755)
+        session = os.path.join(self.dir, "session")
+        os.makedirs(os.path.join(session, "subagents"))
+        for aid, job, last in (("w", "Build the inn", {"type": "assistant", "message": {"stop_reason": "tool_use",
+                                "content": [{"type": "tool_use", "name": "Bash", "input": {"command": "make test"}}]}}),
+                               ("f", "Find callers", {"type": "assistant", "message": {"stop_reason": "end_turn",
+                                "content": [{"type": "text", "text": "Found 3 callers."}]}})):
+            with open(os.path.join(session, "subagents", f"agent-{aid}.meta.json"), "w") as f:
+                json.dump({"agentType": "builder", "description": job}, f)
+            with open(os.path.join(session, "subagents", f"agent-{aid}.jsonl"), "w") as f:
+                f.write(json.dumps(last) + "\n")
         # A minimal, explicit environment: no herdr session, a fake herdr binary.
         env = {"PATH": "/usr/bin:/bin", "LANG": "C.UTF-8", "TERM": "xterm-256color",
                "HERDR_ACTIVE_PANE_CWD": self.dir, "HERDR_BIN_PATH": fake,
                "HERDR_SOCKET_PATH": "/nonexistent", "HOME": self.dir,
-               "XDG_CACHE_HOME": os.path.join(self.dir, "cache")}
+               "XDG_CACHE_HOME": os.path.join(self.dir, "cache"),
+               "TODO_MD_SESSION_DIR": session}
         for k in ("HERDR_PANE_ID", "HERDR_ACTIVE_PANE_ID", "HERDR_PLUGIN_CONTEXT_JSON"):
             os.environ.pop(k, None)
-        for k in ("HERDR_ACTIVE_PANE_CWD", "HERDR_BIN_PATH", "XDG_CACHE_HOME"):
+        for k in ("HERDR_ACTIVE_PANE_CWD", "HERDR_BIN_PATH", "XDG_CACHE_HOME", "TODO_MD_SESSION_DIR"):
             os.environ[k] = env[k]
         sys.path.insert(0, HERE)
         import viewer
@@ -89,6 +100,7 @@ class Viewer(unittest.TestCase):
     def click(self, action, **state):
         """Click the region bound to `action`, laid out as the viewer does for `state`."""
         app = self.viewer.App(self.dir)
+        app.refresh_agents()
         for k, v in state.items():
             setattr(app, k, v)
         head, body = app.build(COLS - 1)
@@ -111,6 +123,15 @@ class Viewer(unittest.TestCase):
         self.assertNotIn("Done thing", self.screen)
         self.assertNotIn("Ship", self.screen)          # all-done phase hidden entirely
         self.assertIn("now", self.screen)
+
+    def test_agents_section(self):
+        self.assertIn("1 working", self.screen)
+        self.assertIn("Build the inn", self.screen)
+        self.assertIn("Bash: make test", self.screen)
+        self.assertNotIn("Find callers", self.screen)          # finished: folded
+        s = self.click(("toggle-finished",))
+        self.assertIn("Find callers", s)
+        self.assertIn("Found 3 callers.", s)
 
     def test_show_done_adds_items(self):
         s = self.click(("toggle-done",))
@@ -158,6 +179,15 @@ class Viewer(unittest.TestCase):
         self.click(("rm-phase-yes", pid), mode="rm-phase", target=pid)
         self.assertNotIn("## Build", self.file())
         self.assertIn("## General\n- [x] #1 Done thing", self.file())
+
+    def test_delete_phase_with_items(self):
+        pid = "Proj\x00Build"
+        self.click(("rm-phase", pid))
+        self.click(("rm-phase-all", pid), mode="rm-phase", target=pid)
+        self.assertNotIn("## Build", self.file())
+        self.assertNotIn("Pending thing", self.file())
+        self.assertNotIn("General", self.file())
+        self.assertIn("## Ship\n- [x] #4 Shipped", self.file())
 
     def test_esc_cancels_then_closes(self):
         self.click(("select", 5))

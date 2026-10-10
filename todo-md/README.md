@@ -7,28 +7,37 @@ add notes, reorder, delete, add items and phases, or send an item back to the ag
 Your agent's instruction file (`CLAUDE.md` / `AGENTS.md`) has to tell it to maintain the
 file. For example:
 
-```markdown
+~~~markdown
 ## TODO.md
 - For multi-step work (3+ steps, or anything that may span sessions), keep a `TODO.md`
   at the project root (git root, else the cwd). If one exists, read it first and
-  continue from it.
-- Update it as status changes — when you start, finish or skip an item — not only at
-  the end. One short line per item, grouped under `## ` phase headings.
-- Track only what matters: milestones, decisions (mark the ones waiting on me) and
-  key deliverables. Never list obvious steps (read code, edit a file, run tests, fix
-  lint, commit) or split one change into several lines. Aim for ≤ ~6 items per phase.
-- Number every item: `- [ ] #7 text`. Numbers are stable IDs: new item = highest + 1,
-  never reused or renumbered when items move or are deleted.
-- Indented `  - note: …` lines under an item are my notes: read and follow them, keep
-  them when editing the file.
+  continue from it. Update it as status changes, not only at the end.
+- Use exactly this structure — no tables, prose sections, nested checkboxes or extra
+  status lists:
+  ```
+  # <task title>                one block per task, newest last
+  ## <phase>                    phases in working order
+  - [ ] #1 <one-line outcome>
+    - note: <text>              my notes (this popup): follow and keep them
+  ```
+- Items are only milestones, decisions and key deliverables — never obvious steps (read
+  code, edit, run tests, fix lint, commit). ≤ ~6 per phase. End a decision that waits on
+  me with `(waiting on you)`.
+- `#N` is a stable ID: new item = highest + 1, never reused or renumbered. Refer to
+  items by number.
 - Markers: `[ ]` pending · `[~]` running · `[x]` done · `[>]` moved to next phase ·
   `[-]` skipped (with a short reason). Only one `[~]` at a time.
-```
+~~~
 
 ## Behaviour
 
 - Looks for `TODO.md` in the focused pane's cwd, then in each parent directory up to
   the git root (or `$HOME`).
+- **Agents**: when the pane the popup was opened from runs Claude Code, its current
+  session's sub-agents are listed at the top: job, type, run time and what each is doing
+  now (its current tool call). Ones silent for 10 minutes show as quiet; finished ones
+  (last 6 h) fold under "▸ N finished" with their final reply. Read from the session's
+  `subagents/` folder; the session follows `/clear` and `/resume`.
 - Header: overall progress bar and percentage, and the running (`[~]`) item with how long
   it has been running. The time counts from the file's last write when the popup first
   sees the item running, so it is a lower bound.
@@ -42,8 +51,9 @@ file. For example:
     with a note, then asks the agent to redo it), **Delete**
   - Re-check and Redo are sent with `herdr agent prompt` to the pane the popup was opened
     from, or else to an agent working in the project's directory.
-- Phase headings: **+** adds an item, **✕** removes the phase; its items move to the
-  project's `General` phase (the phase is renamed to `General` when there is none).
+- Phase headings: **+** adds an item, **✕** removes the phase. When it has items you choose:
+  **Move items to General** (the project's `General` phase, created by renaming when there is
+  none) or **Delete with items**.
 - **+ Phase** in the header adds a phase at the end of the file; the one on a project
   title adds it at the end of that project.
 - Items the popup adds get the next `#` number; when it writes the file it also numbers
@@ -70,5 +80,6 @@ You can also run it as the plugin action `todo-md.open-viewer`.
 
 ```bash
 python3 tests/test_model.py        # parsing and file edits
+python3 tests/test_agents.py       # sub-agent states from transcripts
 python3 tests/test_viewer_pty.py   # the popup in a pseudo-terminal, driven by mouse clicks
 ```

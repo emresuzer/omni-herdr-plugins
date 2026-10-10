@@ -30,6 +30,7 @@ import unicodedata
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import todo_model as tm  # noqa: E402
+import agents as ag  # noqa: E402
 
 HOME = os.path.expanduser("~")
 TODO_NAME = "TODO.md"
@@ -249,6 +250,11 @@ class App:
         self.msg_at = 0.0
         self.quit = False
         self.since = self.load_since()
+        self.show_finished = False
+        self.session = None      # Claude Code session dir of the pane alt+t came from
+        self.agents = []
+        self.agents_at = 0.0
+        self.session_at = 0.0
         self.reload(force=True)
 
     # file ---------------------------------------------------------------
@@ -377,19 +383,25 @@ class App:
             same = self.mode == kind and self.target == a[1]
             self.mode, self.target, self.buf = ("idle", None, "") if same else (kind, a[1], "")
             self.sel = None
-        elif kind == "rm-phase-yes":
+        elif kind in ("rm-phase-yes", "rm-phase-all"):
+            self.reload(force=True)
             p = tm.find_phase(self.text, a[1])
-            out = tm.remove_phase(self.text, p) if p else None
+            wipe = kind == "rm-phase-all"
+            out = None if p is None else (tm.delete_phase(self.text, p) if wipe else tm.remove_phase(self.text, p))
             if out is None:
                 self.say("Phase changed on disk or can't be removed")
             else:
                 self.write(out)
-                self.say(f'Removed phase "{p.title}"' + (f" — items moved to {tm.GENERAL}" if p.items else ""))
+                n = len(p.items)
+                self.say(f'Deleted phase "{p.title}" and its {n} item(s)' if wipe and n
+                         else f'Removed phase "{p.title}"' + (f" — items moved to {tm.GENERAL}" if n else ""))
             self.mode, self.target = "idle", None
         elif kind == "save":
             self.submit()
         elif kind == "cancel":
             self.mode, self.buf, self.target = "idle", "", None
+        elif kind == "toggle-finished":
+            self.show_finished = not self.show_finished
         elif kind == "quit":
             self.quit = True
 
@@ -488,6 +500,50 @@ class App:
         ln.chip("Delete", ("mode", "confirm-delete")).chip("✕", ("close",))
         return [ln]
 
+    def refresh_agents(self):
+        now = time.time()
+        if now - self.session_at > 15:          # follow /clear and /resume
+            self.session_at = now
+            override = os.environ.get("TODO_MD_SESSION_DIR")   # tests
+            if override:
+                self.session = override
+            else:
+                pane_id, _ = context()
+                info = (api_call("pane.process_info", {"pane_id": pane_id}) or {}).get("process_info") if pane_id else None
+                self.session = ag.session_dir(info)
+        if now - self.agents_at > 2:
+            self.agents_at = now
+            self.agents = ag.list_agents(self.session) if self.session else []
+
+    def agent_lines(self, w):
+        if not self.agents:
+            return []
+        live = [a for a in self.agents if a.state != "finished"]
+        done = [a for a in self.agents if a.state == "finished"]
+        now = time.time()
+        out = [Line()]
+        hd = Line().add(" Agents ", fg(C["purple"]) + BOLD)
+        hd.add(f" {len(live)} working" if live else " none working", fg(C["yellow"] if live else C["dim"]))
+        if done:
+            hd.add(" · ", fg(C["dim"]))
+            start = hd.col
+            hd.add(("▾ " if self.show_finished else "▸ ") + f"{len(done)} finished", fg(C["dim"]))
+            hd.regions.append((start, hd.col, ("toggle-finished",)))
+        out.append(hd)
+        out.append(Line().add(" " + "─" * (w - 2), fg(C["line"])))
+        for a in live + (done if self.show_finished else []):
+            dot, col = {"working": ("●", C["yellow"]), "quiet": ("◌", C["sub"]),
+                        "finished": ("✔", C["green"])}[a.state]
+            age = elapsed((a.updated if a.state == "finished" else now) - a.started)
+            meta = f"{a.kind} · {age}" + (f" · quiet {elapsed(now - a.updated)}" if a.state == "quiet" else "")
+            ln = Line().add(f"  {dot} ", fg(col) + BOLD)
+            ln.add(clip(a.job, max(8, w - width(meta) - 8)), fg(C["text"] if a.state != "finished" else C["sub"]) + BOLD)
+            ln.add(" " * max(1, w - ln.col - width(meta) - 1)).add(meta, fg(C["dim"]))
+            out.append(ln)
+            if a.activity:
+                out.append(Line().add("      " + clip(a.activity, w - 8), fg(C["dim"]) + (ITAL if a.state == "finished" else "")))
+        return out
+
     def build(self, w):
         """Return (header lines, body lines)."""
         head = []
@@ -500,7 +556,7 @@ class App:
 
         if not self.path:
             head.append(Line().add(f"   No {TODO_NAME} in {shorten(self.start)} or its parents.", fg(C["dim"])))
-            return head, []
+            return head, self.agent_lines(w)
 
         phases = tm.parse(self.text)
         all_items = [it for p in phases for it in p.items]
@@ -525,7 +581,7 @@ class App:
             head.append(self.input_line("New phase:", w))
         head.append(Line())
 
-        body = []
+        body = self.agent_lines(w)
         last_project = None
         for p in phases:
             shown = p.items if self.show_done else [it for it in p.items if not it.done]
@@ -549,8 +605,7 @@ class App:
             hd.add(f"  {p.done_count}/{len(p.items)}", fg(C["dim"]))
             hd.add(" " * max(1, w - hd.col - 11))
             hd.chip("+", ("add-item", p.id))
-            can_remove = p.line >= 0 and not (p.title == tm.GENERAL and p.items)
-            if can_remove:
+            if p.line >= 0:
                 hd.chip("✕", ("rm-phase", p.id))
             body.append(hd)
             if p.items:
@@ -559,9 +614,16 @@ class App:
                 body.append(b)
             if self.mode == "rm-phase" and self.target == p.id:
                 ask = Line().add("    ")
-                ask.add(f"Remove phase? Its items move to {tm.GENERAL}. " if p.items and p.title != tm.GENERAL
-                        else "Remove phase? ", fg(C["red"]) + BOLD)
-                body.append(ask.chip("Remove", ("rm-phase-yes", p.id), "danger").chip("Cancel", ("cancel",)))
+                n = len(p.items)
+                if not n:
+                    ask.add("Remove this empty phase? ", fg(C["red"]) + BOLD)
+                    ask.chip("Remove", ("rm-phase-yes", p.id), "danger")
+                else:
+                    ask.add(f"Phase has {n} item(s): ", fg(C["red"]) + BOLD)
+                    if p.title != tm.GENERAL:
+                        ask.chip(f"Move items to {tm.GENERAL}", ("rm-phase-yes", p.id), "accent")
+                    ask.chip("Delete with items", ("rm-phase-all", p.id), "danger")
+                body.append(ask.chip("Cancel", ("cancel",)))
             if self.mode == "add-item" and self.target == p.id:
                 body.append(self.input_line("New item:", w))
             for it in shown:
@@ -624,6 +686,7 @@ def run(start):
         while not app.quit:
             if app.mode == "idle" or app.mode.startswith("confirm") or app.mode == "rm-phase":
                 app.reload()
+            app.refresh_agents()
             cols, rows = shutil.get_terminal_size((80, 24))
             w = max(30, cols - 1)
             head, body = app.build(w)
