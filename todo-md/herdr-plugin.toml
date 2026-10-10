@@ -3,7 +3,7 @@ name = "TODO.md Viewer"
 version = "0.1.0"
 min_herdr_version = "0.7.0"
 platforms = ["linux"]
-description = "Popup showing the active project's TODO.md, live-reloading as the agent updates it"
+description = "Mouse-driven popup for the active project's TODO.md: progress, notes, reorder, re-check/redo via the agent"
 
 [[panes]]
 id = "viewer"
