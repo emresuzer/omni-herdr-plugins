@@ -5,6 +5,7 @@ Plugins for [herdr](https://herdr.dev), the terminal workspace manager for AI co
 | Plugin | What it does |
 | :--- | :--- |
 | [`auto-pane-title`](auto-pane-title/) | Sets each pane's title to the agent session name (`/rename` in Claude Code), or the folder name when no agent is running |
+| [`auto-tab-name`](auto-tab-name/) | herdr-app (desktop) mod: names each tab after the agent session title, or the folder; hand-named tabs are left alone |
 | [`recent-chat-items`](recent-chat-items/) | Popup picker for the last files and URLs mentioned in the active AI chat; opens them in their default app |
 | [`todo-md`](todo-md/) | Mouse-driven popup for the active project's `TODO.md`: progress, running item, notes, reorder, add/remove, re-check or redo via the agent |
 
