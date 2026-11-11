@@ -98,6 +98,8 @@ class Conn:
         body = struct.pack("!i", 196608) + params
         sock.sendall(struct.pack("!i", len(body) + 4) + body)
         self.auth(s["user"], s["password"])
+        # literal() doubles quotes only; that is safe only with standard strings (backslash is not an escape).
+        self.query("set standard_conforming_strings = on")
 
     def recv(self):
         while len(self.buf) < 5 or len(self.buf) < 1 + struct.unpack("!i", self.buf[1:5])[0]:
